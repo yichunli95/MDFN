@@ -49,7 +49,7 @@ logger = logging.getLogger(__name__)
 MODEL_CLASSES = {
     'bert': (BertConfig, BertForMultipleChoicePlus, BertTokenizer),
     'roberta': (RobertaConfig, RobertaForMultipleChoicePlus, RobertaTokenizer),
-    'electra': (ElectraConfig, ElectraForMultipleChoicePlus, ElectraTokenizer)
+        'electra': (ElectraConfig, ElectraForMultipleChoicePlus, ElectraTokenizer)
 }
 
 def select_field(features, field):
