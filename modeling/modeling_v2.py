@@ -11,7 +11,7 @@ BertLayerNorm = torch.nn.LayerNorm
 ACT2FN = {"gelu": F.gelu, "relu": F.relu}
 
 class MHA(nn.Module):
-    def __init__(self, config, phrase=False, ngram=2):
+    def __init__(self, config, phrase=False, ngram=3):
         super().__init__()
 
         self.num_attention_heads = config.num_attention_heads
@@ -28,8 +28,8 @@ class MHA(nn.Module):
 
         self.is_phrase = phrase
         if self.is_phrase:
-            self.key_conv = nn.conv1d(in_channels=self.all_head_size, out_channels=self.all_head_size, kernel_size=ngram)
-            self.value_conv = nn.conv1d(in_channels=self.all_head_size, out_channels=self.all_head_size, kernel_size=ngram)
+            self.key_conv = nn.Conv1d(in_channels=self.all_head_size, out_channels=self.all_head_size, kernel_size=ngram, padding=math.floor(ngram/2))
+            self.value_conv = nn.Conv1d(in_channels=self.all_head_size, out_channels=self.all_head_size, kernel_size=ngram, padding=math.floor(ngram/2))
 
     def transpose_for_scores(self, x):
         new_x_shape = x.size()[:-1] + (self.num_attention_heads, self.attention_head_size)
@@ -40,8 +40,9 @@ class MHA(nn.Module):
         mixed_query_layer = self.query(input_ids_a)
         mixed_key_layer = self.key(input_ids_b)
         mixed_value_layer = self.value(input_ids_b)
-
         if self.is_phrase:
+            #print(f'before mixed_key_layer.shape is {mixed_key_layer.shape}')
+            
             mixed_key_layer = mixed_key_layer.permute(0, 2, 1) 
             # (batch_size, seq_len, all_head_size) -> (batch_size, all_head_size, seq_len)
             mixed_key_layer = self.key_conv(mixed_key_layer)
@@ -51,6 +52,7 @@ class MHA(nn.Module):
             # (batch_size, seq_len, all_head_size) -> (batch_size, all_head_size, seq_len)
             mixed_value_layer = self.value_conv(mixed_value_layer)
             mixed_value_layer = mixed_value_layer.permute(0, 2, 1) 
+            #print(f'after mixed_key_layer.shape is {mixed_key_layer.shape}')
 
         query_layer = self.transpose_for_scores(mixed_query_layer)
         key_layer = self.transpose_for_scores(mixed_key_layer)
@@ -147,7 +149,7 @@ class FuseLayer(nn.Module):
 
 
 class ELectra_MC_Plus_PhraseAttention(ElectraPreTrainedModel):
-    def __init__(self, config, num_rnn = 1, num_decoupling = 1, ngram=2):
+    def __init__(self, config, num_rnn = 1, num_decoupling = 1, ngram=3):
         super().__init__(config)
 
         self.electra = ElectraModel(config)
@@ -166,7 +168,7 @@ class ELectra_MC_Plus_PhraseAttention(ElectraPreTrainedModel):
         self.gru1 = GRUWithPadding(config, num_rnn)
         self.gru2 = GRUWithPadding(config, num_rnn)
 
-        self.pooler = nn.Linear(5 * config.hidden_size, config.hidden_size)
+        self.pooler = nn.Linear(4 * config.hidden_size, config.hidden_size)
         self.pooler_activation = nn.Tanh()
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
         self.classifier = nn.Linear(config.hidden_size, 1)
@@ -220,7 +222,6 @@ class ELectra_MC_Plus_PhraseAttention(ElectraPreTrainedModel):
         sa_self_mask = torch.zeros_like(local_mask, dtype = self.dtype)
         sa_cross_mask = torch.zeros_like(local_mask, dtype = self.dtype)
 
-        phrase_mask = 
         last_seps = []
 
         for i in range(input_ids.size(0)):
@@ -277,7 +278,7 @@ class ELectra_MC_Plus_PhraseAttention(ElectraPreTrainedModel):
             phrase_level = self.phraseMHA[t](local_word_level, local_word_level, attention_mask = local_mask)[0]
 
         # context_word_level = self.fuse1(sequence_output, local_word_level, global_word_level)
-        context_word_level = self.fuse1(sequence_output, local_word_level + phrase_level, global_word_level)
+        context_word_level = self.fuse1(sequence_output, torch.add(local_word_level, phrase_level), global_word_level)
         sa_word_level = self.fuse2(sequence_output, sa_self_word_level, sa_cross_word_level)
 
         new_batch = []
