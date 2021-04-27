@@ -39,19 +39,23 @@ from sklearn.metrics import matthews_corrcoef, f1_score
 
 from transformers import (BertConfig, BertForMultipleChoice, BertTokenizer,
                             ElectraConfig, ElectraTokenizer, RobertaConfig, RobertaTokenizer, RobertaForMultipleChoice)
-from modeling import (ElectraForMultipleChoicePlus, Baseline, BertBaseline, RobertaBaseline, BertForMultipleChoicePlus, RobertaForMultipleChoicePlus)
+from modeling import (ElectraForMultipleChoicePlus, Baseline, BertBaseline, RobertaBaseline, BertForMultipleChoicePlus, RobertaForMultipleChoicePlus, ELectra_MC_Plus_PhraseAttention)
 from transformers import (AdamW, WEIGHTS_NAME, CONFIG_NAME)
 import re
 import os
 
 logger = logging.getLogger(__name__)
 
+# MODEL_CLASSES = {
+#     'bert': (BertConfig, BertForMultipleChoicePlus, BertTokenizer),
+#     'roberta': (RobertaConfig, RobertaForMultipleChoicePlus, RobertaTokenizer),
+#         'electra': (ElectraConfig, ElectraForMultipleChoicePlus, ElectraTokenizer)
+# }
 MODEL_CLASSES = {
     'bert': (BertConfig, BertForMultipleChoicePlus, BertTokenizer),
     'roberta': (RobertaConfig, RobertaForMultipleChoicePlus, RobertaTokenizer),
-        'electra': (ElectraConfig, ElectraForMultipleChoicePlus, ElectraTokenizer)
+        'electra': (ElectraConfig, ELectra_MC_Plus_PhraseAttention, ElectraTokenizer)
 }
-
 def select_field(features, field):
     return [
         [

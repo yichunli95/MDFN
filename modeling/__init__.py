@@ -4,3 +4,4 @@ from .modeling_v1 import BertForMultipleChoicePlus
 from .modeling_baseline import ElectraForMultipleChoicePlus as Baseline
 from .modeling_baseline import BertForMultipleChoicePlus as BertBaseline
 from .modeling_baseline import RobertaForMultipleChoicePlus as RobertaBaseline
+from .modeling_v2 import ELectra_MC_Plus_PhraseAttention
