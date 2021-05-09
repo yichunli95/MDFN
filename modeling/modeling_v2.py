@@ -291,7 +291,7 @@ class ELectra_MC_Plus_PhraseAttention(ElectraPreTrainedModel):
         sa_self_word_level = self.SASelfMHA[0](sequence_output, sequence_output, attention_mask = sa_self_mask)[0]
         sa_cross_word_level = self.SACrossMHA[0](sequence_output, sequence_output, attention_mask = sa_cross_mask)[0]
 
-        phrase_level = self.phraseMHA[0](sequence_output, sequence_output, attention_mask = local_mask)[0]
+        #phrase_level = self.phraseMHA[0](sequence_output, sequence_output, attention_mask = local_mask)[0]
 
         for t in range(1, self.num_decoupling):
             local_word_level = self.phrase_localMHA[t](local_word_level, local_word_level, attention_mask = local_mask)[0]
