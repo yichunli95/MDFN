@@ -176,11 +176,12 @@ class ELectra_MC_Plus_PhraseAttention(ElectraPreTrainedModel):
         self.electra = ElectraModel(config)
         self.num_decoupling = num_decoupling
 
-        self.localMHA = nn.ModuleList([MHA(config) for _ in range(num_decoupling)])
-        self.globalMHA = nn.ModuleList([MHA(config) for _ in range(num_decoupling)])
+        #self.localMHA = nn.ModuleList([MHA(config) for _ in range(num_decoupling)])
+        #self.globalMHA = nn.ModuleList([MHA(config) for _ in range(num_decoupling)])
         self.SASelfMHA = nn.ModuleList([MHA(config) for _ in range(num_decoupling)])
         self.SACrossMHA = nn.ModuleList([MHA(config) for _ in range(num_decoupling)])
-        self.phraseMHA = nn.ModuleList([MHA(config, phrase=True, ngram=ngram) for _ in range(num_decoupling)])
+        self.phrase_localMHA = nn.ModuleList([MHA(config, phrase=True, ngram=ngram) for _ in range(num_decoupling)])
+        self.phrase_globalMHA = nn.ModuleList([MHA(config, phrase=True, ngram=ngram) for _ in range(num_decoupling)])
 
         #self.fuse0 = FuseLayer(config)
         self.fuse1 = FuseLayer(config)
@@ -283,26 +284,28 @@ class ELectra_MC_Plus_PhraseAttention(ElectraPreTrainedModel):
         sequence_output = outputs[0] # (batch_size * num_choice, seq_len, hidden_size)
 
 
-        local_word_level = self.localMHA[0](sequence_output, sequence_output, attention_mask = local_mask)[0]
-        global_word_level = self.globalMHA[0](sequence_output, sequence_output, attention_mask = global_mask)[0]
+        #local_word_level = self.localMHA[0](sequence_output, sequence_output, attention_mask = local_mask)[0]
+        #global_word_level = self.globalMHA[0](sequence_output, sequence_output, attention_mask = global_mask)[0]
+        local_word_level = self.phrase_localMHA[0](sequence_output, sequence_output, attention_mask = local_mask)[0]
+        global_word_level = self.phrase_globalMHA[0](sequence_output, sequence_output, attention_mask = global_mask)[0]
         sa_self_word_level = self.SASelfMHA[0](sequence_output, sequence_output, attention_mask = sa_self_mask)[0]
         sa_cross_word_level = self.SACrossMHA[0](sequence_output, sequence_output, attention_mask = sa_cross_mask)[0]
 
         phrase_level = self.phraseMHA[0](sequence_output, sequence_output, attention_mask = local_mask)[0]
 
         for t in range(1, self.num_decoupling):
-            local_word_level = self.localMHA[t](local_word_level, local_word_level, attention_mask = local_mask)[0]
-            global_word_level = self.globalMHA[t](global_word_level, global_word_level, attention_mask = global_mask)[0]
+            local_word_level = self.phrase_localMHA[t](local_word_level, local_word_level, attention_mask = local_mask)[0]
+            global_word_level = self.phrase_globalMHA[t](global_word_level, global_word_level, attention_mask = global_mask)[0]
             sa_self_word_level = self.SASelfMHA[t](sa_self_word_level, sa_self_word_level, attention_mask = sa_self_mask)[0]
             sa_cross_word_level = self.SACrossMHA[t](sa_cross_word_level, sa_cross_word_level, attention_mask = sa_cross_mask)[0]
 
-            phrase_level = self.phraseMHA[t](local_word_level, local_word_level, attention_mask = local_mask)[0]
+            #phrase_level = self.phraseMHA[t](local_word_level, local_word_level, attention_mask = local_mask)[0]
 
 
         #phrase_word_level = self.fuse0(sequence_output, local_word_level, phrase_level)
-        #context_word_level = self.fuse1(sequence_output, local_word_level, global_word_level)
+        context_word_level = self.fuse1(sequence_output, local_word_level, global_word_level)
         #context_word_level = self.fuse1(sequence_output, torch.add(local_word_level, phrase_level), global_word_level)
-        context_word_level = self.fuse1(sequence_output, phrase_level, global_word_level)
+        #context_word_level = self.fuse1(sequence_output, phrase_level, global_word_level)
         sa_word_level = self.fuse2(sequence_output, sa_self_word_level, sa_cross_word_level)
 
         new_batch = []
