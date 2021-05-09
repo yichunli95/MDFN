@@ -40,30 +40,51 @@ class MHA(nn.Module):
         mixed_query_layer = self.query(input_ids_a)
         mixed_key_layer = self.key(input_ids_b)
         mixed_value_layer = self.value(input_ids_b)
-        if self.is_phrase:
-            #print(f'before mixed_key_layer.shape is {mixed_key_layer.shape}')
-            
-            mixed_key_layer = mixed_key_layer.permute(0, 2, 1) 
-            # (batch_size, seq_len, all_head_size) -> (batch_size, all_head_size, seq_len)
-            mixed_key_layer = self.key_conv(mixed_key_layer)
-            mixed_key_layer = mixed_key_layer.permute(0, 2, 1) 
-
-            mixed_value_layer = mixed_value_layer.permute(0, 2, 1) 
-            # (batch_size, seq_len, all_head_size) -> (batch_size, all_head_size, seq_len)
-            mixed_value_layer = self.value_conv(mixed_value_layer)
-            mixed_value_layer = mixed_value_layer.permute(0, 2, 1) 
-            #print(f'after mixed_key_layer.shape is {mixed_key_layer.shape}')
+        mixed_key_layer_conv = None
+        mixed_value_layer_conv = None
+        key_layer_conv = None
+        value_layer_conv = None
 
         query_layer = self.transpose_for_scores(mixed_query_layer)
         key_layer = self.transpose_for_scores(mixed_key_layer)
         value_layer = self.transpose_for_scores(mixed_value_layer)
 
+        if self.is_phrase:
+            #print(f'before mixed_key_layer.shape is {mixed_key_layer.shape}')
+            
+            mixed_key_layer_conv = mixed_key_layer.permute(0, 2, 1) 
+            # (batch_size, seq_len, all_head_size) -> (batch_size, all_head_size, seq_len)
+            mixed_key_layer_conv = self.key_conv(mixed_key_layer_conv)
+            mixed_key_layer_conv = mixed_key_layer_conv.permute(0, 2, 1) 
+
+            mixed_value_layer_conv = mixed_value_layer.permute(0, 2, 1) 
+            # (batch_size, seq_len, all_head_size) -> (batch_size, all_head_size, seq_len)
+            mixed_value_layer_conv = self.value_conv(mixed_value_layer_conv)
+            mixed_value_layer_conv = mixed_value_layer_conv.permute(0, 2, 1) 
+            #print(f'after mixed_key_layer.shape is {mixed_key_layer.shape}')
+
+            key_layer_conv = self.transpose_for_scores(mixed_key_layer_conv)
+            value_layer_conv = self.transpose_for_scores(mixed_value_layer_conv)
+            # print(f"key_layer_conv.shape is {key_layer_conv.shape}")
+            # print(f"value_layer_conv.shape is {value_layer_conv.shape}")
+            key_layer = torch.cat([key_layer, key_layer_conv], dim=-2)
+            value_layer = torch.cat([value_layer, value_layer_conv], dim=-2)
+            # print(f"key_layer.shape is {key_layer.shape}")
+            # print(f"value_layer.shape is {value_layer.shape}")
+            # print(f"query_layer.shape is {query_layer.shape}")
+
+            
         # Take the dot product between "query" and "key" to get the raw attention scores.
         attention_scores = torch.matmul(query_layer, key_layer.transpose(-1, -2))
         attention_scores = attention_scores / math.sqrt(self.attention_head_size)
+          
         if attention_mask is not None:
+          if self.is_phrase:
+            attention_mask = attention_mask.repeat(1,1,1,2)
+            # print(f"attention_scores.shape is {attention_scores.shape}")
+            # print(f"attention_mask.shape is {attention_mask.shape}")
             # Apply the attention mask is (precomputed for all layers in BertModel forward() function)
-            attention_scores = attention_scores + attention_mask
+          attention_scores = attention_scores + attention_mask
 
         # Normalize the attention scores to probabilities.
         attention_probs = nn.Softmax(dim=-1)(attention_scores)
@@ -161,7 +182,7 @@ class ELectra_MC_Plus_PhraseAttention(ElectraPreTrainedModel):
         self.SACrossMHA = nn.ModuleList([MHA(config) for _ in range(num_decoupling)])
         self.phraseMHA = nn.ModuleList([MHA(config, phrase=True, ngram=ngram) for _ in range(num_decoupling)])
 
-
+        #self.fuse0 = FuseLayer(config)
         self.fuse1 = FuseLayer(config)
         self.fuse2 = FuseLayer(config)
         
@@ -277,8 +298,11 @@ class ELectra_MC_Plus_PhraseAttention(ElectraPreTrainedModel):
 
             phrase_level = self.phraseMHA[t](local_word_level, local_word_level, attention_mask = local_mask)[0]
 
-        # context_word_level = self.fuse1(sequence_output, local_word_level, global_word_level)
-        context_word_level = self.fuse1(sequence_output, torch.add(local_word_level, phrase_level), global_word_level)
+
+        #phrase_word_level = self.fuse0(sequence_output, local_word_level, phrase_level)
+        #context_word_level = self.fuse1(sequence_output, local_word_level, global_word_level)
+        #context_word_level = self.fuse1(sequence_output, torch.add(local_word_level, phrase_level), global_word_level)
+        context_word_level = self.fuse1(sequence_output, phrase_level, global_word_level)
         sa_word_level = self.fuse2(sequence_output, sa_self_word_level, sa_cross_word_level)
 
         new_batch = []
